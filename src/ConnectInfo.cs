@@ -14,7 +14,7 @@ namespace ConnectInfo
     public class ConnectInfoConfig : BasePluginConfig
     {
         [JsonPropertyName("GeoLiteEnglish")] public bool GeoLiteEnglish { get; set; } = false;
-
+        [JsonPropertyName("CityIncluded")] public bool CityIncluded { get; set; } = true;
         [JsonPropertyName("LogPrefix")] public string LogPrefix { get; set; } = "[Connect Info] ";
         [JsonPropertyName("ConnectMessageWithGeo")] public string ConnectMessageWithGeo { get; set; } = "{PURPLE}[INFO] {DEFAULT}Игрок {GRAY}{PLAYERNAME} {DEFAULT} подключается из {GREEN}{GEOINFO} {LIME}[+]";
         [JsonPropertyName("ConnectMessageWithoutGeo")] public string ConnectMessageWithoutGeo { get; set; } = "{PURPLE}[INFO] {DEFAULT}Игрок {GRAY}{PLAYERNAME} {DEFAULT} подключается {LIME}[+]";
@@ -23,11 +23,11 @@ namespace ConnectInfo
         [JsonPropertyName("ConsoleConnectMessageWithoutGeo")] public string ConsoleConnectMessageWithoutGeo { get; set; } = "Игрок {PLAYERNAME} подключается";
     }
 
-    [MinimumApiVersion(41)]
+    [MinimumApiVersion(33)]
     public class ConnectInfo : BasePlugin, IPluginConfig<ConnectInfoConfig>
     {
         public override string ModuleName => "Connect Info";
-        public override string ModuleVersion => "v1.0.2";
+        public override string ModuleVersion => "v1.0.3";
         public override string ModuleAuthor => "gleb_khlebov";
 
         public override string ModuleDescription => "Information about the player's location when connecting to chat and console";
@@ -47,24 +47,30 @@ namespace ConnectInfo
         [GameEventHandler]
         public HookResult OnPlayerConnect(EventPlayerConnect @event, GameEventInfo info)
         {
-            string geoInfo = GetGeoInfo(@event.Address.Split(':')[0]);
-            string playerName = @event.Name;
-            
-            if (!string.IsNullOrEmpty(geoInfo))
+            var player = new CCSPlayerController(@event.Userid.Handle);
+            if (player.PawnBotDifficulty == -1)
             {
-                string consoleLogMessage = ReplaceMessageTags(Config.ConsoleConnectMessageWithGeo, playerName, geoInfo);
-                Log(consoleLogMessage);
-                string serverChatMessage = ReplaceMessageTags(Config.ConnectMessageWithGeo, playerName, geoInfo);
-                Server.PrintToChatAll($" {serverChatMessage}");
-            }
-            else
-            {
-                string consoleLogMessage = ReplaceMessageTags(Config.ConsoleConnectMessageWithoutGeo, playerName, String.Empty);
-                Log(consoleLogMessage);
-                string serverChatMessage = ReplaceMessageTags(Config.ConnectMessageWithoutGeo, playerName, String.Empty);
-                Server.PrintToChatAll($" {serverChatMessage}");
-            }
+                string geoInfo = GetGeoInfo(@event.Address.Split(':')[0]);
+                string playerName = @event.Name;
 
+                if (!string.IsNullOrEmpty(geoInfo))
+                {
+                    string consoleLogMessage =
+                        ReplaceMessageTags(Config.ConsoleConnectMessageWithGeo, playerName, geoInfo);
+                    Log(consoleLogMessage);
+                    string serverChatMessage = ReplaceMessageTags(Config.ConnectMessageWithGeo, playerName, geoInfo);
+                    Server.PrintToChatAll($" {serverChatMessage}");
+                }
+                else
+                {
+                    string consoleLogMessage =
+                        ReplaceMessageTags(Config.ConsoleConnectMessageWithoutGeo, playerName, String.Empty);
+                    Log(consoleLogMessage);
+                    string serverChatMessage =
+                        ReplaceMessageTags(Config.ConnectMessageWithoutGeo, playerName, String.Empty);
+                    Server.PrintToChatAll($" {serverChatMessage}");
+                }
+            }
             return HookResult.Continue;
         }
 
@@ -108,7 +114,7 @@ namespace ConnectInfo
                     result = country;
                 }
 
-                if (!string.IsNullOrEmpty(result) && !string.IsNullOrEmpty(city))
+                if (!string.IsNullOrEmpty(result) && !string.IsNullOrEmpty(city) && Config.CityIncluded)
                 {
                     result += ", " + city;
                 }
