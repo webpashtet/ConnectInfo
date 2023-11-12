@@ -23,7 +23,7 @@ namespace ConnectInfo
         [JsonPropertyName("ConsoleConnectMessageWithoutGeo")] public string ConsoleConnectMessageWithoutGeo { get; set; } = "Игрок {PLAYERNAME} подключается";
     }
 
-    [MinimumApiVersion(33)]
+    [MinimumApiVersion(41)]
     public class ConnectInfo : BasePlugin, IPluginConfig<ConnectInfoConfig>
     {
         public override string ModuleName => "Connect Info";
