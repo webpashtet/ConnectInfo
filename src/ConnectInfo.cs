@@ -47,26 +47,25 @@ namespace ConnectInfo
         [GameEventHandler]
         public HookResult OnPlayerConnect(EventPlayerConnect @event, GameEventInfo info)
         {
-            var player = new CCSPlayerController(@event.Userid.Handle);
-            if (player.PawnBotDifficulty == -1)
+            if (!@event.Bot)
             {
-                string geoInfo = GetGeoInfo(@event.Address.Split(':')[0]);
-                string playerName = @event.Name;
+                var geoInfo = GetGeoInfo(@event.Address.Split(':')[0]);
+                var playerName = @event.Name;
 
                 if (!string.IsNullOrEmpty(geoInfo))
                 {
-                    string consoleLogMessage =
+                    var consoleLogMessage =
                         ReplaceMessageTags(Config.ConsoleConnectMessageWithGeo, playerName, geoInfo);
                     Log(consoleLogMessage);
-                    string serverChatMessage = ReplaceMessageTags(Config.ConnectMessageWithGeo, playerName, geoInfo);
+                    var serverChatMessage = ReplaceMessageTags(Config.ConnectMessageWithGeo, playerName, geoInfo);
                     Server.PrintToChatAll($" {serverChatMessage}");
                 }
                 else
                 {
-                    string consoleLogMessage =
+                    var consoleLogMessage =
                         ReplaceMessageTags(Config.ConsoleConnectMessageWithoutGeo, playerName, String.Empty);
                     Log(consoleLogMessage);
-                    string serverChatMessage =
+                    var serverChatMessage =
                         ReplaceMessageTags(Config.ConnectMessageWithoutGeo, playerName, String.Empty);
                     Server.PrintToChatAll($" {serverChatMessage}");
                 }
@@ -78,7 +77,7 @@ namespace ConnectInfo
         public HookResult OnPlayerDisconnect(EventPlayerDisconnect @event, GameEventInfo info)
         {
             var player = new CCSPlayerController(@event.Userid.Handle);
-            string disconnectMessage = ReplaceMessageTags(Config.DisconnectMessage, player.PlayerName, String.Empty);
+            var disconnectMessage = ReplaceMessageTags(Config.DisconnectMessage, player.PlayerName, String.Empty);
             if (player.PawnBotDifficulty == -1)
                 Server.PrintToChatAll($" {disconnectMessage}");
             return HookResult.Continue;
