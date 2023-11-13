@@ -27,7 +27,7 @@ namespace ConnectInfo
     public class ConnectInfo : BasePlugin, IPluginConfig<ConnectInfoConfig>
     {
         public override string ModuleName => "Connect Info";
-        public override string ModuleVersion => "v1.0.3";
+        public override string ModuleVersion => "v1.0.4";
         public override string ModuleAuthor => "gleb_khlebov";
 
         public override string ModuleDescription => "Information about the player's location when connecting to chat and console";
