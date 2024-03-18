@@ -53,23 +53,23 @@ namespace ConnectInfo
             var geoInfo = GetGeoInfo(@event.Address.Split(':')[0]);
             var playerName = player.PlayerName;
 
+            String consoleLogMessage;
+            String serverChatMessage;
+
             if (!string.IsNullOrEmpty(geoInfo))
             {
-                var consoleLogMessage =
-                    ReplaceMessageTags(Config.ConsoleConnectMessageWithGeo, playerName, geoInfo);
-                Log(consoleLogMessage);
-                var serverChatMessage = ReplaceMessageTags(Config.ConnectMessageWithGeo, playerName, geoInfo);
-                Server.NextFrame(() => Server.PrintToChatAll(serverChatMessage));
+                consoleLogMessage = ReplaceMessageTags(Config.ConsoleConnectMessageWithGeo, playerName, geoInfo);
+                serverChatMessage = ReplaceMessageTags(Config.ConnectMessageWithGeo, playerName, geoInfo);
             }
             else
             {
-                var consoleLogMessage =
+                consoleLogMessage = 
                     ReplaceMessageTags(Config.ConsoleConnectMessageWithoutGeo, playerName, String.Empty);
-                Log(consoleLogMessage);
-                var serverChatMessage =
+                serverChatMessage =
                     ReplaceMessageTags(Config.ConnectMessageWithoutGeo, playerName, String.Empty);
-                Server.NextFrame(() => Server.PrintToChatAll(serverChatMessage));
             }
+            Log(consoleLogMessage);
+            Server.NextFrame(() => Server.PrintToChatAll(serverChatMessage));
             return HookResult.Continue;
         }
 
