@@ -1,19 +1,17 @@
-﻿using System;
+﻿using System.Net;
+using System.Text.Json.Serialization;
 using CounterStrikeSharp.API;
-using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes;
 using CounterStrikeSharp.API.Core.Attributes.Registration;
-using System.Text.Json.Serialization;
-using System.Collections.Generic;
+using CounterStrikeSharp.API.Modules.Utils;
 using MaxMind.Db;
-using System.Net;
 using Newtonsoft.Json;
 
 namespace ConnectInfo
 {
     public class ConnectInfoConfig : BasePluginConfig
     {
-        [JsonPropertyName("GeoLiteEnglish")] public bool GeoLiteEnglish { get; set; } = false;
+        [JsonPropertyName("GeoLiteLanguage")] public string GeoLiteLanguage { get; set; } = "ru";
         [JsonPropertyName("CityIncluded")] public bool CityIncluded { get; set; } = true;
         [JsonPropertyName("LogPrefix")] public string LogPrefix { get; set; } = "[Connect Info] ";
         [JsonPropertyName("ConnectMessageWithGeo")] public string ConnectMessageWithGeo { get; set; } = "{PURPLE}[INFO] {DEFAULT}Игрок {GRAY}{PLAYERNAME} {DEFAULT} подключается из {GREEN}{GEOINFO} {LIME}[+]";
@@ -27,7 +25,7 @@ namespace ConnectInfo
     public class ConnectInfo : BasePlugin, IPluginConfig<ConnectInfoConfig>
     {
         public override string ModuleName => "Connect Info";
-        public override string ModuleVersion => "v1.0.4";
+        public override string ModuleVersion => "v1.0.5";
         public override string ModuleAuthor => "gleb_khlebov";
 
         public override string ModuleDescription => "Information about the player's location when connecting to chat and console";
@@ -47,28 +45,30 @@ namespace ConnectInfo
         [GameEventHandler]
         public HookResult OnPlayerConnect(EventPlayerConnect @event, GameEventInfo info)
         {
-            if (!@event.Bot)
-            {
-                var geoInfo = GetGeoInfo(@event.Address.Split(':')[0]);
-                var playerName = @event.Name;
+            CCSPlayerController? player = @event.Userid;
+            
+            if (player is null || !player.IsValid || player.IsBot || player.IsHLTV || player.SteamID.ToString().Length != 17)
+                return HookResult.Continue;
+            
+            var geoInfo = GetGeoInfo(@event.Address.Split(':')[0]);
+            var playerName = player.PlayerName;
 
-                if (!string.IsNullOrEmpty(geoInfo))
-                {
-                    var consoleLogMessage =
-                        ReplaceMessageTags(Config.ConsoleConnectMessageWithGeo, playerName, geoInfo);
-                    Log(consoleLogMessage);
-                    var serverChatMessage = ReplaceMessageTags(Config.ConnectMessageWithGeo, playerName, geoInfo);
-                    Server.PrintToChatAll($" {serverChatMessage}");
-                }
-                else
-                {
-                    var consoleLogMessage =
-                        ReplaceMessageTags(Config.ConsoleConnectMessageWithoutGeo, playerName, String.Empty);
-                    Log(consoleLogMessage);
-                    var serverChatMessage =
-                        ReplaceMessageTags(Config.ConnectMessageWithoutGeo, playerName, String.Empty);
-                    Server.PrintToChatAll($" {serverChatMessage}");
-                }
+            if (!string.IsNullOrEmpty(geoInfo))
+            {
+                var consoleLogMessage =
+                    ReplaceMessageTags(Config.ConsoleConnectMessageWithGeo, playerName, geoInfo);
+                Log(consoleLogMessage);
+                var serverChatMessage = ReplaceMessageTags(Config.ConnectMessageWithGeo, playerName, geoInfo);
+                Server.NextFrame(() => Server.PrintToChatAll(serverChatMessage));
+            }
+            else
+            {
+                var consoleLogMessage =
+                    ReplaceMessageTags(Config.ConsoleConnectMessageWithoutGeo, playerName, String.Empty);
+                Log(consoleLogMessage);
+                var serverChatMessage =
+                    ReplaceMessageTags(Config.ConnectMessageWithoutGeo, playerName, String.Empty);
+                Server.NextFrame(() => Server.PrintToChatAll(serverChatMessage));
             }
             return HookResult.Continue;
         }
@@ -76,10 +76,14 @@ namespace ConnectInfo
         [GameEventHandler]
         public HookResult OnPlayerDisconnect(EventPlayerDisconnect @event, GameEventInfo info)
         {
-            var player = new CCSPlayerController(@event.Userid.Handle);
+            CCSPlayerController? player = @event.Userid;
+            
+            if (player is null || !player.IsValid || player.IsBot || player.IsHLTV || player.SteamID.ToString().Length != 17)
+                return HookResult.Continue;
+            
             var disconnectMessage = ReplaceMessageTags(Config.DisconnectMessage, player.PlayerName, String.Empty);
-            if (player.PawnBotDifficulty == -1)
-                Server.PrintToChatAll($" {disconnectMessage}");
+            Server.NextFrame(() => Server.PrintToChatAll(disconnectMessage));
+            
             return HookResult.Continue;
         }
 
@@ -96,15 +100,36 @@ namespace ConnectInfo
                 var geoInfo = JsonConvert.DeserializeObject<dynamic>(json)!;
                 string city;
                 string country;
-                if (Config.GeoLiteEnglish)
+                switch (Config.GeoLiteLanguage)
                 {
-                    country = geoInfo.country.names.en;
-                    city = geoInfo.city.names.en;
-                }
-                else
-                {
-                    country = geoInfo.country.names.ru;
-                    city = geoInfo.city.names.ru;
+                    case "ru":
+                        country = geoInfo.country.names.ru;
+                        city = geoInfo.city.names.ru;
+                        break;
+                    case "de":
+                        country = geoInfo.country.names.de;
+                        city = geoInfo.city.names.de;
+                        break;
+                    case "es":
+                        country = geoInfo.country.names.es;
+                        city = geoInfo.city.names.es;
+                        break;
+                    case "ja":
+                        country = geoInfo.country.names.ja;
+                        city = geoInfo.city.names.ja;
+                        break;
+                    case "fr":
+                        country = geoInfo.country.names.fr;
+                        city = geoInfo.city.names.fr;
+                        break;
+                    case "en":
+                        country = geoInfo.country.names.en;
+                        city = geoInfo.city.names.en;
+                        break;
+                    default:
+                        country = geoInfo.country.names.en;
+                        city = geoInfo.city.names.en;
+                        break;
                 }
 
                 string result = null!;
@@ -143,13 +168,18 @@ namespace ConnectInfo
         {
             string[] colorPatterns =
             {
-                "{DEFAULT}", "{RED}", "{LIGHTPURPLE}", "{GREEN}", "{LIME}", "{LIGHTGREEN}", "{LIGHTRED}", "{GRAY}",
-                "{LIGHTOLIVE}", "{OLIVE}", "{LIGHTBLUE}", "{BLUE}", "{PURPLE}", "{GRAYBLUE}"
+                "{DEFAULT}", "{WHITE}", "{DARKRED}", "{GREEN}", "{LIGHTYELLOW}", "{LIGHTBLUE}", "{OLIVE}", "{LIME}",
+                "{RED}", "{LIGHTPURPLE}", "{PURPLE}", "{GREY}", "{YELLOW}", "{GOLD}", "{SILVER}", "{BLUE}", "{DARKBLUE}",
+                "{BLUEGREY}", "{MAGENTA}", "{LIGHTRED}", "{ORANGE}"
             };
             string[] colorReplacements =
             {
-                "\x01", "\x02", "\x03", "\x04", "\x05", "\x06", "\x07", "\x08", "\x09", "\x10", "\x0B", "\x0C", "\x0E",
-                "\x0A"
+                $"{ChatColors.Default}", $"{ChatColors.White}", $"{ChatColors.DarkRed}", $"{ChatColors.Green}",
+                $"{ChatColors.LightYellow}", $"{ChatColors.LightBlue}", $"{ChatColors.Olive}", $"{ChatColors.Lime}",
+                $"{ChatColors.Red}", $"{ChatColors.LightPurple}", $"{ChatColors.Purple}", $"{ChatColors.Grey}",
+                $"{ChatColors.Yellow}", $"{ChatColors.Gold}", $"{ChatColors.Silver}", $"{ChatColors.Blue}",
+                $"{ChatColors.DarkBlue}", $"{ChatColors.BlueGrey}", $"{ChatColors.Magenta}", $"{ChatColors.LightRed}",
+                $"{ChatColors.Orange}"
             };
 
             for (var i = 0; i < colorPatterns.Length; i++)
