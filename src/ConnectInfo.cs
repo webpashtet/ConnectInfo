@@ -1,9 +1,11 @@
-﻿using System.Net;
+﻿using System;
+using System.Collections.Generic;
+using System.Net;
 using System.Text.Json.Serialization;
 using CounterStrikeSharp.API;
+using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes;
 using CounterStrikeSharp.API.Core.Attributes.Registration;
-using CounterStrikeSharp.API.Modules.Utils;
 using MaxMind.Db;
 using Newtonsoft.Json;
 
@@ -25,7 +27,7 @@ namespace ConnectInfo
     public class ConnectInfo : BasePlugin, IPluginConfig<ConnectInfoConfig>
     {
         public override string ModuleName => "Connect Info";
-        public override string ModuleVersion => "v1.0.5";
+        public override string ModuleVersion => "v1.0.6";
         public override string ModuleAuthor => "gleb_khlebov";
 
         public override string ModuleDescription => "Information about the player's location when connecting to chat and console";
@@ -45,13 +47,11 @@ namespace ConnectInfo
         [GameEventHandler]
         public HookResult OnPlayerConnect(EventPlayerConnect @event, GameEventInfo info)
         {
-            CCSPlayerController? player = @event.Userid;
-            
-            if (player is null || !player.IsValid || player.IsBot || player.IsHLTV || player.SteamID.ToString().Length != 17)
+            if (@event.Bot)
                 return HookResult.Continue;
-            
+
             var geoInfo = GetGeoInfo(@event.Address.Split(':')[0]);
-            var playerName = player.PlayerName;
+            var playerName = @event.Name;
 
             String consoleLogMessage;
             String serverChatMessage;
@@ -63,7 +63,7 @@ namespace ConnectInfo
             }
             else
             {
-                consoleLogMessage = 
+                consoleLogMessage =
                     ReplaceMessageTags(Config.ConsoleConnectMessageWithoutGeo, playerName, String.Empty);
                 serverChatMessage =
                     ReplaceMessageTags(Config.ConnectMessageWithoutGeo, playerName, String.Empty);
@@ -77,13 +77,13 @@ namespace ConnectInfo
         public HookResult OnPlayerDisconnect(EventPlayerDisconnect @event, GameEventInfo info)
         {
             CCSPlayerController? player = @event.Userid;
-            
-            if (player is null || !player.IsValid || player.IsBot || player.IsHLTV || player.SteamID.ToString().Length != 17)
+
+            if (player.IsBot)
                 return HookResult.Continue;
-            
+
             var disconnectMessage = ReplaceMessageTags(Config.DisconnectMessage, player.PlayerName, String.Empty);
             Server.NextFrame(() => Server.PrintToChatAll(disconnectMessage));
-            
+
             return HookResult.Continue;
         }
 
@@ -152,7 +152,7 @@ namespace ConnectInfo
 
             return null!;
         }
-        
+
         private string ReplaceMessageTags(string message, string player, string geoinfo)
         {
             var replacedMessage = message
@@ -163,23 +163,18 @@ namespace ConnectInfo
 
             return replacedMessage;
         }
-        
+
         private string ReplaceColorTags(string input)
         {
             string[] colorPatterns =
             {
-                "{DEFAULT}", "{WHITE}", "{DARKRED}", "{GREEN}", "{LIGHTYELLOW}", "{LIGHTBLUE}", "{OLIVE}", "{LIME}",
-                "{RED}", "{LIGHTPURPLE}", "{PURPLE}", "{GREY}", "{YELLOW}", "{GOLD}", "{SILVER}", "{BLUE}", "{DARKBLUE}",
-                "{BLUEGREY}", "{MAGENTA}", "{LIGHTRED}", "{ORANGE}"
+                "{DEFAULT}", "{RED}", "{LIGHTPURPLE}", "{GREEN}", "{LIME}", "{LIGHTGREEN}", "{LIGHTRED}", "{GRAY}",
+                "{LIGHTOLIVE}", "{OLIVE}", "{LIGHTBLUE}", "{BLUE}", "{PURPLE}", "{GRAYBLUE}"
             };
             string[] colorReplacements =
             {
-                $"{ChatColors.Default}", $"{ChatColors.White}", $"{ChatColors.DarkRed}", $"{ChatColors.Green}",
-                $"{ChatColors.LightYellow}", $"{ChatColors.LightBlue}", $"{ChatColors.Olive}", $"{ChatColors.Lime}",
-                $"{ChatColors.Red}", $"{ChatColors.LightPurple}", $"{ChatColors.Purple}", $"{ChatColors.Grey}",
-                $"{ChatColors.Yellow}", $"{ChatColors.Gold}", $"{ChatColors.Silver}", $"{ChatColors.Blue}",
-                $"{ChatColors.DarkBlue}", $"{ChatColors.BlueGrey}", $"{ChatColors.Magenta}", $"{ChatColors.LightRed}",
-                $"{ChatColors.Orange}"
+                "\x01", "\x02", "\x03", "\x04", "\x05", "\x06", "\x07", "\x08", "\x09", "\x10", "\x0B", "\x0C", "\x0E",
+                "\x0A"
             };
 
             for (var i = 0; i < colorPatterns.Length; i++)
