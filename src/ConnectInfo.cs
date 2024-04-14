@@ -1,9 +1,11 @@
-﻿using System.Net;
-using System.Text.Json.Serialization;
+﻿using System;
+using System.Collections.Generic;
+using System.Net;
 using CounterStrikeSharp.API;
+using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes;
 using CounterStrikeSharp.API.Core.Attributes.Registration;
-using CounterStrikeSharp.API.Modules.Utils;
+using CounterStrikeSharp.API.Modules.Admin;
 using MaxMind.Db;
 using Newtonsoft.Json;
 
@@ -11,26 +13,25 @@ namespace ConnectInfo
 {
     public class ConnectInfoConfig : BasePluginConfig
     {
-        [JsonPropertyName("GeoLiteLanguage")] public string GeoLiteLanguage { get; set; } = "ru";
-        [JsonPropertyName("CityIncluded")] public bool CityIncluded { get; set; } = true;
-        [JsonPropertyName("LogPrefix")] public string LogPrefix { get; set; } = "[Connect Info] ";
-        [JsonPropertyName("ConnectMessageWithGeo")] public string ConnectMessageWithGeo { get; set; } = "{PURPLE}[INFO] {DEFAULT}Игрок {GRAY}{PLAYERNAME} {DEFAULT} подключается из {GREEN}{GEOINFO} {LIME}[+]";
-        [JsonPropertyName("ConnectMessageWithoutGeo")] public string ConnectMessageWithoutGeo { get; set; } = "{PURPLE}[INFO] {DEFAULT}Игрок {GRAY}{PLAYERNAME} {DEFAULT} подключается {LIME}[+]";
-        [JsonPropertyName("DisconnectMessage")] public string DisconnectMessage { get; set; } = "{PURPLE}[INFO] {DEFAULT}Игрок {GRAY}{PLAYERNAME} {DEFAULT} вышел с сервера {LIGHTRED}[-]";
-        [JsonPropertyName("ConsoleConnectMessageWithGeo")] public string ConsoleConnectMessageWithGeo { get; set; } = "Игрок {PLAYERNAME} подключается из {GEOINFO}";
-        [JsonPropertyName("ConsoleConnectMessageWithoutGeo")] public string ConsoleConnectMessageWithoutGeo { get; set; } = "Игрок {PLAYERNAME} подключается";
+        public string GeoLiteLanguage { get; set; } = "ru";
+        public bool CityIncluded { get; set; } = true;
+        public List<string> ImmunityFlags { get; set; } = [..new[] { "@css/root", "@css/ban" }];
     }
 
-    [MinimumApiVersion(33)]
+    [MinimumApiVersion(199)]
     public class ConnectInfo : BasePlugin, IPluginConfig<ConnectInfoConfig>
     {
         public override string ModuleName => "Connect Info";
-        public override string ModuleVersion => "v1.0.5";
+        public override string ModuleVersion => "v1.0.7";
         public override string ModuleAuthor => "gleb_khlebov";
 
         public override string ModuleDescription => "Information about the player's location when connecting to chat and console";
 
-        public ConnectInfoConfig Config { get; set; }
+        public ConnectInfoConfig Config { get; set; } = new();
+
+        private new static readonly string ModuleDirectory = Server.GameDirectory + "/csgo/addons/counterstrikesharp/plugins/ConnectInfo";
+
+        private readonly Reader _reader = new (ModuleDirectory + "/../../shared/GeoLite2-City.mmdb");
 
         public void OnConfigParsed(ConnectInfoConfig config)
         {
@@ -39,37 +40,61 @@ namespace ConnectInfo
 
         public override void Load(bool hotReload)
         {
-            Log("Connect Info loaded");
+            base.Load(hotReload);
+            
+            Console.WriteLine(" ");
+            Console.WriteLine("   _____                            _     _____        __      ");
+            Console.WriteLine("  / ____|                          | |   |_   _|      / _|     ");
+            Console.WriteLine(" | |     ___  _ __  _ __   ___  ___| |_    | |  _ __ | |_ ___  ");
+            Console.WriteLine(" | |    / _ \\| '_ \\| '_ \\ / _ \\/ __| __|   | | | '_ \\|  _/ _ \\ ");
+            Console.WriteLine(" | |___| (_) | | | | | | |  __/ (__| |_   _| |_| | | | || (_) |");
+            Console.WriteLine("  \\_____\\___/|_| |_|_| |_|\\___|\\___|\\__| |_____|_| |_|_| \\___/ ");
+            Console.WriteLine("                                                               ");
+            Console.WriteLine("                                                               ");
+            Console.WriteLine("			>> Version: " + ModuleVersion);
+            Console.WriteLine("			>> Author: " + ModuleAuthor);
+            Console.WriteLine("         >> MaxMind DB build date: " + _reader.Metadata.BuildDate);
+            Console.WriteLine(" ");
+        }
+
+        public override void Unload(bool hotReload)
+        {
+            _reader.Dispose();
+            base.Unload(hotReload);
         }
 
         [GameEventHandler]
-        public HookResult OnPlayerConnect(EventPlayerConnect @event, GameEventInfo info)
+        public HookResult OnPlayerConnectFull(EventPlayerConnectFull @event, GameEventInfo info)
         {
             CCSPlayerController? player = @event.Userid;
-            
-            if (player is null || !player.IsValid || player.IsBot || player.IsHLTV || player.SteamID.ToString().Length != 17)
-                return HookResult.Continue;
-            
-            var geoInfo = GetGeoInfo(@event.Address.Split(':')[0]);
-            var playerName = player.PlayerName;
 
-            String consoleLogMessage;
-            String serverChatMessage;
+            if (IsInvalidPlayer(player))
+                return HookResult.Continue;
+
+            string? ip = player.IpAddress;
+            string playerName = player.PlayerName;
+
+            string consoleLogMessage;
+            string serverChatMessage;
+
+            string geoInfo = !string.IsNullOrEmpty(ip) ? GetGeoInfo(ip.Split(':')[0]) : string.Empty;
 
             if (!string.IsNullOrEmpty(geoInfo))
             {
-                consoleLogMessage = ReplaceMessageTags(Config.ConsoleConnectMessageWithGeo, playerName, geoInfo);
-                serverChatMessage = ReplaceMessageTags(Config.ConnectMessageWithGeo, playerName, geoInfo);
+                consoleLogMessage = ReplaceMessageTags(Localizer["ConsoleConnectMessageWithGeo"], playerName, geoInfo);
+                serverChatMessage = ReplaceMessageTags(Localizer["ConnectMessageWithGeo"], playerName, geoInfo);
             }
             else
             {
-                consoleLogMessage = 
-                    ReplaceMessageTags(Config.ConsoleConnectMessageWithoutGeo, playerName, String.Empty);
+                consoleLogMessage =
+                    ReplaceMessageTags(Localizer["ConsoleConnectMessageWithoutGeo"], playerName, string.Empty);
                 serverChatMessage =
-                    ReplaceMessageTags(Config.ConnectMessageWithoutGeo, playerName, String.Empty);
+                    ReplaceMessageTags(Localizer["ConnectMessageWithoutGeo"], playerName, string.Empty);
             }
+
             Log(consoleLogMessage);
             Server.NextFrame(() => Server.PrintToChatAll(serverChatMessage));
+
             return HookResult.Continue;
         }
 
@@ -77,13 +102,13 @@ namespace ConnectInfo
         public HookResult OnPlayerDisconnect(EventPlayerDisconnect @event, GameEventInfo info)
         {
             CCSPlayerController? player = @event.Userid;
-            
-            if (player is null || !player.IsValid || player.IsBot || player.IsHLTV || player.SteamID.ToString().Length != 17)
+
+            if (IsInvalidPlayer(player))
                 return HookResult.Continue;
-            
-            var disconnectMessage = ReplaceMessageTags(Config.DisconnectMessage, player.PlayerName, String.Empty);
+
+            string disconnectMessage = ReplaceMessageTags(Localizer["DisconnectMessage"], player.PlayerName, string.Empty);
             Server.NextFrame(() => Server.PrintToChatAll(disconnectMessage));
-            
+
             return HookResult.Continue;
         }
 
@@ -91,11 +116,9 @@ namespace ConnectInfo
         {
             try
             {
-                var reader = new Reader(ModuleDirectory + "/../../shared/GeoLite2-City.mmdb");
                 var parsedIp = IPAddress.Parse(ip);
-                var data = reader.Find<Dictionary<string, object>>(parsedIp);
+                var data = _reader.Find<Dictionary<string, object>>(parsedIp);
                 var json = JsonConvert.SerializeObject(data);
-                reader.Dispose();
 
                 var geoInfo = JsonConvert.DeserializeObject<dynamic>(json)!;
                 string city;
@@ -133,6 +156,7 @@ namespace ConnectInfo
                 }
 
                 string result = null!;
+
                 if (!string.IsNullOrEmpty(country))
                 {
                     result = country;
@@ -145,54 +169,33 @@ namespace ConnectInfo
 
                 return result;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Log(ex.Message);
+                Log($"Could not find data for IP {ip} in the MaxMind database");
             }
 
             return null!;
         }
-        
-        private string ReplaceMessageTags(string message, string player, string geoinfo)
+
+        private static string ReplaceMessageTags(string message, string player, string geoInfo)
         {
             var replacedMessage = message
                 .Replace("{PLAYERNAME}", player)
-                .Replace("{GEOINFO}", geoinfo);
-
-            replacedMessage = ReplaceColorTags(replacedMessage);
+                .Replace("{GEOINFO}", geoInfo);
 
             return replacedMessage;
         }
-        
-        private string ReplaceColorTags(string input)
+
+        private bool IsInvalidPlayer(CCSPlayerController player)
         {
-            string[] colorPatterns =
-            {
-                "{DEFAULT}", "{WHITE}", "{DARKRED}", "{GREEN}", "{LIGHTYELLOW}", "{LIGHTBLUE}", "{OLIVE}", "{LIME}",
-                "{RED}", "{LIGHTPURPLE}", "{PURPLE}", "{GREY}", "{YELLOW}", "{GOLD}", "{SILVER}", "{BLUE}", "{DARKBLUE}",
-                "{BLUEGREY}", "{MAGENTA}", "{LIGHTRED}", "{ORANGE}"
-            };
-            string[] colorReplacements =
-            {
-                $"{ChatColors.Default}", $"{ChatColors.White}", $"{ChatColors.DarkRed}", $"{ChatColors.Green}",
-                $"{ChatColors.LightYellow}", $"{ChatColors.LightBlue}", $"{ChatColors.Olive}", $"{ChatColors.Lime}",
-                $"{ChatColors.Red}", $"{ChatColors.LightPurple}", $"{ChatColors.Purple}", $"{ChatColors.Grey}",
-                $"{ChatColors.Yellow}", $"{ChatColors.Gold}", $"{ChatColors.Silver}", $"{ChatColors.Blue}",
-                $"{ChatColors.DarkBlue}", $"{ChatColors.BlueGrey}", $"{ChatColors.Magenta}", $"{ChatColors.LightRed}",
-                $"{ChatColors.Orange}"
-            };
-
-            for (var i = 0; i < colorPatterns.Length; i++)
-                input = input.Replace(colorPatterns[i], colorReplacements[i]);
-
-            return input;
+            return Config.ImmunityFlags.Count >= 1 && AdminManager.PlayerHasPermissions(player, Config.ImmunityFlags.ToArray());
         }
 
         private void Log(string message)
         {
             Console.BackgroundColor = ConsoleColor.DarkGray;
             Console.ForegroundColor = ConsoleColor.DarkMagenta;
-            Console.WriteLine(Config.LogPrefix + message);
+            Console.WriteLine(Localizer["LogPrefix"] + message);
             Console.ResetColor();
         }
     }
